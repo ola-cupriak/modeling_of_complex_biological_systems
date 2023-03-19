@@ -104,7 +104,7 @@ dev.off()
 > Make one heatmap of the aforementioned Bottomly data with the following options: a) both rows and columns are clustered, b) show a dendrogram only on the columns., and c) scale in the column direction. Send only one heatmap. If you are unsure, check the help document on this function by typing ?heatmap.2
 
 ```{r}
-pdf("Cupriak_problem1.pdf", width = 30, height = 30)
+pdf("Cupriak_problem1.pdf", width = 10, height = 10)
 heatmap.2(edata,
           main = "Bottomly et al. Clustered rows and cols", # heat map title
           notecol="black",      # change font color of cell labels to black
