@@ -1,0 +1,318 @@
+---
+title: "homework2"
+output: pdf_document
+date: "2023-03-25"
+---
+# Load dependencies
+```{r load_hidden, echo=FALSE, warning=FALSE, results="hide"}
+suppressPackageStartupMessages({
+  library(devtools)
+  library(Biobase)
+  library(sva)
+  library(bladderbatch)
+  library(broom)
+  library(tidyverse)
+  library(data.table)
+  library(RColorBrewer)
+  library(gplots)
+  library(broom)
+  library(ggplot2)
+  library(tidyverse)
+})
+```
+```{r load}
+  library(devtools)
+  library(Biobase)
+  library(sva)
+  library(bladderbatch)
+  library(broom)
+  library(tidyverse)
+  library(data.table)
+  library(RColorBrewer)
+  library(gplots)
+  library(broom)
+  library(ggplot2)
+  library(tidyverse)
+```
+
+Loading the data and preprocessing, as it was done in the laboratory.
+
+```{r}
+library(bladderbatch)
+data(bladderdata)
+
+# sample info
+pheno = pData(bladderEset)
+# expression data
+edata = exprs(bladderEset)
+
+sumna <- apply(edata, 1, function(x) sum(is.na(x)))
+row.variances <- apply(edata, 1, function(x) var(x))
+edata <- edata[row.variances < 6,]
+edata.log <- log2(edata)
+```
+
+> *Homework Problem 1:*
+> Create a table to show the batch effects (refer to Figure 1 in Gilad and Mizrahi-Man, 2015). There are 5 batches (`pheno$batch`); how are biological variables and other variables related to study design are distributed among those 5 batches? Explain what could be a problem. Prepare this into a PDF file.
+
+```{r}
+library(gridExtra)
+library(grid)
+
+pdf('Cupriak_problem1.pdf')
+
+df1 <- data.frame('batch1'=pheno[pheno$batch == 1,"outcome"][!duplicated(pheno[pheno$batch == 1,"outcome"])],
+           'batch2'=pheno[pheno$batch == 2,"outcome"][!duplicated(pheno[pheno$batch == 2,"outcome"])],
+           'batch3'=pheno[pheno$batch == 3,"outcome"][!duplicated(pheno[pheno$batch == 3,"outcome"])],
+           'batch4'=pheno[pheno$batch == 4,"outcome"][!duplicated(pheno[pheno$batch == 4,"outcome"])],
+           'batch5'=pheno[pheno$batch == 5,"outcome"][!duplicated(pheno[pheno$batch == 5,"outcome"])]
+           )
+levels(df1$batch1) <- c(levels(df1$batch1), '')
+levels(df1$batch3) <- c(levels(df1$batch3), '')
+levels(df1$batch4) <- c(levels(df1$batch4), '')
+df1[2, 'batch1'] <- ''
+df1[3, 'batch1'] <- ''
+df1[2, 'batch3'] <- ''
+df1[3, 'batch3'] <- ''
+df1[2, 'batch4'] <- ''
+df1[3, 'batch4'] <- ''
+
+
+df2 <- data.frame('batch1'=pheno[pheno$batch == 1,"cancer"][!duplicated(pheno[pheno$batch == 1,"cancer"])],
+           'batch2'=pheno[pheno$batch == 2,"cancer"][!duplicated(pheno[pheno$batch == 2,"cancer"])],
+           'batch3'=pheno[pheno$batch == 3,"cancer"][!duplicated(pheno[pheno$batch == 3,"cancer"])],
+           'batch4'=pheno[pheno$batch == 4,"cancer"][!duplicated(pheno[pheno$batch == 4,"cancer"])],
+           'batch5'=pheno[pheno$batch == 5,"cancer"][!duplicated(pheno[pheno$batch == 5,"cancer"])]
+           )
+levels(df2$batch1) <- c(levels(df2$batch1), '')
+levels(df2$batch2) <- c(levels(df2$batch2), '')
+levels(df2$batch3) <- c(levels(df2$batch3), '')
+levels(df2$batch4) <- c(levels(df2$batch4), '')
+levels(df2$batch4) <- c(levels(df2$batch4), '')
+
+df2[2, 'batch1'] <- ''
+df2[2, 'batch3'] <- ''
+df2[2, 'batch4'] <- ''
+
+grid.table(df1)
+plot.new()
+grid.table(df2)
+dev.off()
+```
+
+> *Homework Problem 2:*
+> Make heatmaps, BEFORE and AFTER cleaning the data using ComBat, where columns are arranged according to the study design. You must sort the columns such that 5 batches are shown. Cluster the rows, but do not cluster the columns (samples) when drawing a heatmap. The general idea is that you want to see if the Combat-cleaned data are any improvement in the general patterns.
+
+```{r}
+library(sva)
+
+# order the columns according to batch number
+pheno.ordered <- pheno[order(pheno$batch),]
+colnames.ordered <- row.names(pheno.ordered)
+edata.ordered <- edata[,colnames.ordered]
+batch.ordered <- pheno.ordered$batch
+
+# clean edata using ComBat
+combat_edata <- ComBat(dat=edata, batch=pheno$batch, mod=model.matrix(~1, data=pheno), par.prior=TRUE, prior.plots=TRUE)
+combat_edata.oredered <- combat_edata[,colnames.ordered]
+```
+
+```{r}
+## compare heatmaps before vs. after
+library(gplots)
+library(RColorBrewer)
+my_palette <- colorRampPalette(c("blue", "white", "darkred"))(n = 299)
+
+pdf("Cupriak_problem2.pdf",height=10,width=10)
+
+colnames <- paste('batch', as.character(batch.ordered), ":", sep="")
+colnames <- paste(colnames, colnames.ordered, sep=" ")
+
+heatmap.2(edata.ordered,
+          main = "Bladder Cancer Data before ComBat cleaning", # heat map title
+          notecol="black",      # change font color of cell labels to black
+          density.info="none",  # turns off density plot inside color legend
+          trace="none",         # turns off trace lines inside the heat map
+          margins =c(12,9),     # widens margins around plot
+          col=my_palette,       # use on color palette defined earlier 
+          dendrogram="none",
+          scale = "row",
+          Rowv = TRUE,
+          Colv = FALSE,
+          labCol = colnames)
+
+heatmap.2(combat_edata.oredered,
+          main = "Bladder Cancer Data after ComBat cleaning", # heat map title
+          notecol="black",      # change font color of cell labels to black
+          density.info="none",  # turns off density plot inside color legend
+          trace="none",         # turns off trace lines inside the heat map
+          margins =c(12,9),     # widens margins around plot
+          col=my_palette,       # use on color palette defined earlier 
+          dendrogram="none",
+          scale = "row",
+          Rowv = TRUE,
+          Colv = FALSE,
+          labCol = colnames)
+dev.off()
+```
+
+> *Homework Problem 3:*
+> Make heatmaps of Pearson correlations statistics of samples. For example, see Figure 2 and 3 freom Gilad and Mizrahi-Man (2015) F1000Research: \url{https://f1000research.com/articles/4-121}.
+> First, compute the correlation statistics among columns. Second, create a heatmap using heatmap.2(). Make sure to create or add labels for samples (cancer vs. normal; batch numbers; others)
+
+```{r}
+# define my color palettes
+color1 <- colorRampPalette(brewer.pal(8, "Spectral"))(25)
+color2 <- colorRampPalette(brewer.pal(8, "PRGn"))(25)
+color3 <- colorRampPalette(brewer.pal(8, "PuOr"))(25)
+
+# compute the correlation statistics among columns
+correlation <- cor(edata, method = "pearson")
+
+colnames <- row.names(pheno)
+
+pdf("Cupriak_problem3.pdf",height=10,width=10)
+heatmap.2(correlation,
+          col = color1,
+          main = "Pearson correlation labeled cancer or normal", 
+          notecol="black",      
+          density.info="none",  
+          trace="none",         
+          margins =c(12,9), 
+          dendrogram="none",
+          labRow = paste(colnames, ":", pheno$cancer, sep = ""),
+          labCol = paste(colnames, ":", pheno$cancer, sep = ""),
+          cexRow=0.4,
+          cexCol=0.5)
+
+heatmap.2(correlation, 
+          col = color2, 
+          main = "Pearson correlation labeled by batch",
+          notecol="black",      
+          density.info="none",  
+          trace="none",
+          dendrogram = "none",
+          margins =c(12,9),
+          labRow = paste(colnames, ":batch", pheno$batch, sep=""),
+          labCol = paste(colnames, ":batch", pheno$batch, sep=""),
+          cexRow=0.4,
+          cexCol=0.5)
+
+heatmap.2(correlation, 
+        col = color3, 
+        main = "Pearson correlation labeled by outcome",
+        notecol="black",      
+        density.info="none",  
+        trace="none",
+        dendrogram = "none",
+        margins =c(12,9),   
+        labRow = paste(colnames, ":", pheno$outcome, sep = ""),
+        labCol = paste(colnames, ":", pheno$outcome, sep = ""),
+        cexRow=0.4,
+        cexCol=0.5)
+
+dev.off()
+```
+
+> *Homework Problem 4:*
+> Apply two different Linear Models to the Bottomly et al. data. First, using a conventional approach, create a linear model with a genetic strain (biological variable) and an experimental number (technical variable) on **uncorrected** gene expression data. Second, create a linear model with a genetic strain (biological variables) on **corrected** gene expression data from ComBat. Make a scatter plots of coefficients and a histogram of p-values as done in this notebook. Make sure that you are pulling out the correct coefficients, not any or all coefficients. 
+
+```{r load_bottomly_data}
+con = url("http://bowtie-bio.sourceforge.net/recount/ExpressionSets/bottomly_eset.RData")
+load(file=con)
+close(con)
+edata_bottom <- as.matrix(exprs(bottomly.eset))
+edata_bottom <- edata_bottom[rowMeans(edata_bottom) > 10, ]
+edata_bottom <- log2(edata_bottom + 1)
+
+pdata <- pData(bottomly.eset)
+
+```
+
+```{r}
+# create a linear model with a genetic strain (biological variable) and an experimental number (technical variable) on uncorrected gene expression data from Bottomly.
+model.uncorrected <- lm(t(edata_bottom) ~ as.factor(pdata$strain) + as.factor(pdata$experiment.number))
+
+rownames(coefficients(model.uncorrected))
+
+#tidy the data
+model.uncorrected.tidy <- tidy(model.uncorrected)
+
+# clean the data using ComBat
+combat.edata_bottom = ComBat(dat=edata_bottom, batch=pdata$experiment.number, mod=model.matrix(~1, data=pdata), par.prior=TRUE, prior.plots=TRUE)
+
+# create a linear model with a genetic strain (biological variable) and an experimental number (technical variable) on corrected gene expression data from Bottomly.
+model.corrected <- lm(t(combat.edata_bottom) ~ as.factor(pdata$strain))
+
+#tidy the data
+model.corrected.tidy <- tidy(model.corrected)
+```
+
+```{r}
+pdf("Cupriak_problem4.pdf", height = 10, width = 10)
+
+# p-values related to genetic strain DBA/2J.
+
+ggplot(model.uncorrected.tidy %>% filter(term == "as.factor(pdata$strain)DBA/2J")) + geom_histogram(aes(x=p.value), bins = 100, fill="darkorange") + ggtitle("P-values(strain DBA/2J) from linear model on UNCORRECTED data") + theme(plot.title = element_text(size=18))
+
+ggplot(model.corrected.tidy %>% filter(term == "as.factor(pdata$strain)DBA/2J")) + geom_histogram(aes(x=p.value), bins = 100, fill="darkorange") + ggtitle("P-values (strain DBA/2J) from linear model on CORRECTED data") + theme(plot.title = element_text(size=18))
+
+# scatter plots of coefficients
+
+est_compare <- tibble(
+  LinearModel = model.uncorrected.tidy %>% filter(term == "as.factor(pdata$strain)DBA/2J") %>% select("estimate") %>% unlist,
+  ComBat = model.corrected.tidy %>% filter(term == "as.factor(pdata$strain)DBA/2J") %>% select("estimate") %>% unlist)
+
+ggplot(est_compare, aes(x=LinearModel, y=ComBat)) +
+     geom_point(col="darkgrey", alpha=.5, size=.5) + geom_abline(intercept=0, slope=1, col="darkred") + geom_smooth(method = "lm", se = TRUE)  + theme_bw() + ggtitle("Scatter plot of coefficients for genetic strain DBA/2J") + theme(plot.title = element_text(size=18))
+
+dev.off()
+```
+
+## Problem 5
+> *Homework Problem 5:*
+> Apply ComBat and SVA to the Bottomly et al. data. 
+> Make a scatter plots of coefficients and a histogram of p-values, comparing results based on ComBat and SVA. 
+> Assume that the biological variables in Bottomly et al data is the genetic strains. 
+> Make sure that you are pulling out the correct coefficients/pvalues, not any or all of them.
+
+```{r}
+mod = model.matrix(~as.factor(strain),data=pdata)
+mod0 = model.matrix(~1, data=pdata)
+
+sva_output = sva(edata_bottom, mod, mod0, n.sv=num.sv(edata_bottom,mod,method="leek"))
+head(sva_output$sv)
+summary(lm(sva_output$sv ~ pdata$experiment.number))
+```
+
+```{r}
+# Add the surrogate variables to the model matrix
+modsva = lm(t(edata_bottom) ~ as.factor(pdata$strain) + sva_output$sv)
+modsva.tidy <- tidy(modsva)
+
+pdf("Cupriak_problem5.pdf", height = 10, width = 10)
+
+# scatter plot
+
+est_compare <- tibble(
+  ComBat = model.corrected.tidy %>% filter(term == "as.factor(pdata$strain)DBA/2J") %>% select("estimate") %>% unlist,
+  SVA = modsva.tidy %>% filter(term == "as.factor(pdata$strain)DBA/2J") %>% select("estimate") %>% unlist)
+
+ggplot(est_compare, aes(x=ComBat, y=SVA)) +
+     geom_point(col="darkgrey", alpha=.5, size=.5) + geom_abline(intercept=0, slope=1, col="darkred") + geom_smooth(method = "lm", se = TRUE)  + ggtitle("Scatter plot of coefficients for genetic strain DBA/2J") + theme(plot.title = element_text(size=18))
+
+# histogram of p-values
+
+pvalues <- tibble(
+  ComBat = model.corrected.tidy %>% filter(term == "as.factor(pdata$strain)DBA/2J") %>% select("p.value") %>% unlist,
+  SVA = modsva.tidy %>% filter(term == "as.factor(pdata$strain)DBA/2J") %>% select("p.value") %>% unlist)
+
+pvalues_gather <- gather(pvalues)
+ggplot(pvalues_gather, aes(x=value)) + geom_histogram() + facet_wrap(~key)
+
+dev.off()
+```
+
+
+
+
