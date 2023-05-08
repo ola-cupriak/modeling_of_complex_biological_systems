@@ -1,0 +1,202 @@
+---
+title: "homework3"
+output: html_document
+---
+
+# Homework
+
+You need to apply the same analysis pipeline to the bigger dataset published in Zheng et al. 2017, specifically called 'Fresh 68k PBMCs (Donor A)'. If you are not familiar, please read the original paper (listed on the syllabus and the website).
+
+Download the following data on 10X Genomics
+https://support.10xgenomics.com/single-cell-gene-expression/datasets
+
+### Single Cell 3' Paper: Zheng et al. 2017
+#### Fresh 68k PBMCs (Donor A)
+
+# Homework Problem 1
+Analyze the 68k PBMCs dataset in the same way as presented in the Seurat's guide with PBMC3k. Apply QC, PCA, jackstraw, clustering, and t-SNE to create figure similar to Figure 3b on Zheng et al. 2017. Note that there are differences between Zheng's original analysis and Seurat's analysis. Pay attentions to hyper-parameters that you must choose for this new bigger dataset.
+
+Provide R markdown file with your codes and outputs.
+
+Present the t-SNE visualization with 10 clusters as defined by K-means clustering
+
+Reproduce Figure 3 but note difference in results: https://www.nature.com/articles/ncomms14049/figures/3
+
+# Solution
+Load libraries and data
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+```
+
+```{r}
+# Load the PBMC dataset
+pbmc.data <- Read10X(data.dir = "filtered_matrices_mex/hg19/")
+
+# Initialize the Seurat object with the raw (non-normalized data).
+pbmc <- CreateSeuratObject(counts = pbmc.data, project = "problem1", min.cells = 3, min.features = 200)
+pbmc
+```
+
+Add percent.mt feature
+
+```{r}
+pbmc[["percent.mt"]] <- PercentageFeatureSet(pbmc, pattern = "^MT-")
+```
+
+
+Create plots
+
+```{r}
+VlnPlot(pbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3) + geom_boxplot(width=0.1, outlier.colour=rgb(0.5,0.5,0.5, 0.5) )
+
+plot1 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "percent.mt") 
+plot2 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") 
+plot1 + plot2
+```
+
+Select subset with >200 and <2500 nFeature_RNA count and with>5% mitochondrial counts.
+Then log-normalize the data.
+
+```{r}
+pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5)
+dim(pbmc)
+pbmc <- NormalizeData(pbmc, normalization.method = "LogNormalize", scale.factor = 10000)
+```
+
+Select 469 most variable features (as done in the Zheng et al. 2017 paper)
+
+```{r}
+pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = 469)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(pbmc), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(pbmc)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+Scaling the data 
+
+```{r}
+pbmc <- ScaleData(pbmc, vars.to.regress = 'percent.mt')
+```
+
+PCA 
+
+```{r}
+pbmc <- RunPCA(pbmc, features = VariableFeatures(object = pbmc))
+# Examine and visualize PCA results a few different ways
+print(pbmc[['pca']], dims = 1:5, nfeatures = 5)
+VizDimLoadings(pbmc, dims = 1:2, reduction = 'pca')
+DimPlot(pbmc, reduction = 'pca')
+```
+
+JackStraw and result visualization
+
+```{r}
+pbmc <- JackStraw(pbmc, num.replicate = 100)
+pbmc <- ScoreJackStraw(pbmc, dims = 1:20)
+
+JackStrawPlot(pbmc, dims = 1:15)
+ElbowPlot(pbmc)
+```
+
+Experimenting with resolution parameter - 0.5 fives 19 clusters, 0.1 - 8 clusters, finally I've found that 0.122 gave 10 clusters as wanted.
+Searching for resolution parameters to get 10 clusters.
+
+```{r}
+pbmc <- FindNeighbors(pbmc, dims = 1:10)
+```
+
+```{r}
+pbmc_try1 <- FindClusters(pbmc, resolution = 0.5)
+head(Idents(pbmc_try1), 5)
+```
+
+Resolution parameter=0.5 returns 19 clusters 
+
+```{r}
+pbmc_try2 <- FindClusters(pbmc, resolution = 0.3)
+head(Idents(pbmc_try2), 5)
+```
+
+Resolution parameter=0.3 returns 17 clusters 
+
+```{r}
+pbmc_try3 <- FindClusters(pbmc, resolution = 0.1)
+head(Idents(pbmc_try3), 5)
+```
+
+Resolution parameter=0.1 returns 8 clusters 
+
+```{r}
+pbmc_try4 <- FindClusters(pbmc, resolution = 0.15)
+head(Idents(pbmc_try4), 5)
+```
+Resolution parameter=0.15 returns 11 clusters 
+
+```{r}
+pbmc_try5 <- FindClusters(pbmc, resolution = 0.13)
+head(Idents(pbmc_try4), 5)
+```
+Resolution parameter=0.13 returns 10 clusters. In view of this, it was possible to find the right value of the resolution parameter to get 10 clusters.
+
+Run tSNE and get final plot.
+
+```{r}
+pbmc <- FindClusters(pbmc, resolution = 0.13)
+pbmc <- RunTSNE(pbmc, dims = 1:10)
+```
+
+```{r}
+pdf("Cupriak_problem1.pdf")
+
+new.cluster.ids <- lapply(seq(1,10), function(x){paste(c('cluster', x), collapse=" ")})
+percentages <- lapply(seq(0,9), function(x) {round(length(pbmc$seurat_clusters[(pbmc$seurat_clusters == x)]) / length(pbmc$seurat_clusters) * 100, 1)})
+percentages <- lapply(seq(1,10), function(x){paste(c(percentages[x], "%"), collapse = "")})
+new.cluster.ids <- lapply(seq(1,10), function(x){paste(c(new.cluster.ids[x], percentages[x]), collapse = "\n")})
+ 
+names(new.cluster.ids) <- levels(pbmc)
+pbmc <- RenameIdents(pbmc, new.cluster.ids)
+
+DimPlot(pbmc, reduction = "tsne", label = TRUE, pt.size = 0.5) + NoLegend() + ggtitle("Overall t-SNE visualization with all clusters")
+dev.off()
+```
+
+# Homework Problem 2
+Create a hierachical clustering by applying K-means clustering to cells defined by each of 10 cluster. Try to find a suitable number of clusters (k) for each sub-population.
+
+Present
+
+* overall t-SNE visualization with all clusters -- make sure that hierarchy (group) is visualized 
+* visualize t-SNE for each of 10 clusters, with their sub-clusters.
+
+For example, Zheng et al. 2017
+>  To identify subpopulations within the myeloid population, we further applied k-means clustering on the first 50 PCs of cluster 9 cells
+
+# Solution
+1. Overall t-SNE visualization with all clusters is done in problem 1.
+
+2. Visualize t-SNE for each of 10 clusters with their sub-clusters.
+
+```{r}
+clusters <- lapply(seq(0,9), function(x) {subset(pbmc, seurat_clusters == x)})
+clusters <- lapply(clusters, function(x) {FindNeighbors(x, dims= 1:10)})
+clusters <- lapply(clusters, function(x) {FindClusters(x, resolution = 0.5)})
+clusters <- lapply(clusters, function(x) {RunTSNE(x, dims = 1:10)})
+```
+
+```{r}
+pdf("Cupriak_problem2.pdf")
+DimPlot(pbmc, reduction = "tsne", label = TRUE, pt.size = 0.5) + NoLegend() + ggtitle("Overall t-SNE visualization with all clusters")
+for (i in seq(1:10)){
+  print((DimPlot(clusters[[i]], reduction = "tsne")) + ggtitle(paste("t-SNE for subcluster number: ", i)))
+}
+dev.off()
+```
+
